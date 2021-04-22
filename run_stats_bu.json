@@ -1,0 +1,9 @@
+{
+    "total_files": 13113,
+    "total_predicted": 6342,
+    "total_pred_audio_len": 91076.72832199553,
+    "load_time": 0.7549166679382324,
+    "prediction_time": 6663.968068599701,
+    "empty_object_prediction": 2140,
+    "empty_scene_prediction": 2140
+}

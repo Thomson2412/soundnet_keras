@@ -1,8 +1,10 @@
-from keras.layers import BatchNormalization, Activation, Conv1D, MaxPooling1D, ZeroPadding1D, Input
-from keras.models import Model
+from tensorflow.keras.layers import BatchNormalization, Activation, Conv1D, MaxPooling1D, ZeroPadding1D, Input
+from tensorflow.keras.models import Model
 import numpy as np
 import librosa
 import glob
+import json
+import time
 
 
 def preprocess(audio):
@@ -112,19 +114,55 @@ if __name__ == '__main__':
     with open('categories/categories_places2.txt', 'r') as f:
         scene_categories = f.read().split('\n')
 
-    files = {}
-    for filename in sorted(glob.glob("sounds/**/*.wav")):
-        duration = librosa.get_duration(filename=filename)
+    files = sorted(glob.glob("sounds/**/*.wav"))
+    files_to_predict = {}
+    total_duration_to_pred = 0
+    time_load_start = time.time()
+    for path in files:
+        duration = librosa.get_duration(filename=path)
         if duration >= 5.1:
-            print(duration)
-            files[filename] = load_audio(filename)
-            if len(files) > 20:
-                break
+            files_to_predict[path] = duration
+            total_duration_to_pred += duration
+            print("{} duration: {}".format(path, duration))
+    time_load_finish = time.time()
+    load_time = time_load_finish - time_load_start
 
-    for filename, file in files.items():
-        plain_prediction = model_object.predict(file)
+    prediction_result_object = {}
+    prediction_result_scene = {}
+    prediction_time_per_file = {}
+    for path, audio_length in files_to_predict.items():
+        time_pred_start = time.time()
+        plain_prediction = model_object.predict(load_audio(path))
         object_pred_cat = predictions_to_categories(plain_prediction[0], object_categories)
-        print("OBJECT {}: {}".format(filename, object_pred_cat))
-
         scene_pred_cat = predictions_to_categories(plain_prediction[1], scene_categories)
-        print("SCENE {}: {}".format(filename, scene_pred_cat))
+        print("OBJECT {}: {}".format(path, object_pred_cat))
+        print("SCENE {}: {}".format(path, scene_pred_cat))
+        time_pred_finish = time.time()
+        pred_time = time_pred_finish - time_pred_start
+        prediction_result_object[path] = {
+            "audio_length": audio_length,
+            "prediction_time": pred_time,
+            "prediction": object_pred_cat
+        }
+        prediction_result_scene[path] = {
+            "audio_length": audio_length,
+            "prediction_time": pred_time,
+            "prediction": scene_pred_cat
+        }
+
+    with open("prediction_result_object.json", "w") as prediction_result_object_outfile:
+        json.dump(prediction_result_object, prediction_result_object_outfile, indent=4)
+    with open("prediction_result_scene.json", "w") as prediction_result_scene_outfile:
+        json.dump(prediction_result_scene, prediction_result_scene_outfile, indent=4)
+
+    run_stats = {
+        "total_files": len(files),
+        "total_predicted": len(files_to_predict),
+        "total_pred_audio_len": total_duration_to_pred,
+        "load_time": load_time,
+        "prediction_time": sum(item["prediction_time"] for item in prediction_result_object.values()),
+        "empty_object_prediction": sum(len(item["prediction"]) == 0 for item in prediction_result_object.values()),
+        "empty_scene_prediction": sum(len(item["prediction"]) == 0 for item in prediction_result_scene.values())
+    }
+    with open("run_stats.json", "w") as run_stats_outfile:
+        json.dump(run_stats, run_stats_outfile, indent=4)
